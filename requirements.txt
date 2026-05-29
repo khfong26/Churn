@@ -1,0 +1,7 @@
+boto3==1.43.17
+numpy==2.4.6
+pandas==3.0.3
+st_files_connection==0.1.0
+streamlit==1.58.0
+xgboost==3.2.0
+s3fs==2024.6.0
