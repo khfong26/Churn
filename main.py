@@ -1,27 +1,19 @@
 import streamlit as st 
-from st_files_connection import FilesConnection
 import pandas as pd 
 import numpy as np
 import pickle
-import datetime as dt
 import json
-from xgboost import plot_importance
-from xgboost.sklearn import XGBRegressor as XGBR
-import boto3
-from io import BytesIO
-from io import StringIO
 
 # title of the Web App
 st.title("Customer Churn Risk Score Predictor")
 st.header("This application predicts the risk score associated with a customer leaving (cancelling subscription, stop purchasing goods/services, etc.)")
 st.write("Specify input conditions (parameters)")
 
-# FIX 1: Updated connection syntax
-conn = st.connection('s3', type=FilesConnection)
-df = conn.read("churn-challenge/cleaned_data.csv", input_format="csv", ttl=600)
-del df["Unnamed: 0"]
+# 1. READ LOCAL CSV (No more AWS connections)
+df = pd.read_csv("cleaned_data.csv")
+if "Unnamed: 0" in df.columns:
+    del df["Unnamed: 0"]
 
-# transform the user_input as we have been transforming the data as before
 def user_inputs():
     # numerical 
     age = st.slider("How old is the customer", min_value=1, max_value=80, step=1)
@@ -61,46 +53,43 @@ def user_inputs():
     x_input = pd.DataFrame(data, index=[0])
     return x_input
 
-# Function to read a CSV file from S3
-def read_csv_from_s3(bucket_name, file_key):
-    s3 = boto3.client('s3')
-    obj = s3.get_object(Bucket=bucket_name, Key=file_key)
-    data = obj['Body'].read().decode('utf-8')
-    df = pd.read_csv(StringIO(data))
-    return df
-
-def transform(df, freq_dict, cols):
+def transform(df_input, freq_dict, cols):
     for c in cols:
-        subdict = freq_dict[c]
-        df[f'per_{c}'] = df[c].map(subdict)
+        if c in freq_dict:
+            subdict = freq_dict[c]
+            df_input[f'per_{c}'] = df_input[c].map(subdict)
+    return df_input
 
-bucket_name = "churn-challenge"
+# 2. LOAD LOCAL JSON FREQUENCY DICTIONARY
+with open("frequency_encoding.json", "r") as f:
+    count_dict = json.load(f)
 
-# FIX 2: Added the specific file name string
-df = read_csv_from_s3(bucket_name, "cleaned_data.csv")
+cols_to_transform = list(count_dict.keys())
 
-s3 = boto3.resource('s3')
-
-# FIX 3: Uncommented the model loading sequence
-with BytesIO() as data:
-    s3.Bucket("churn-challenge").download_fileobj("submit_model.pkl", data)
-    data.seek(0)    
-    model = pickle.load(data)
-
-count_dict = conn.read("churn-challenge/freq_dict.json", input_format="json", ttl=600)
+# 3. LOAD LOCAL MODEL
+with open("submit_model.pkl", "rb") as f:
+    model = pickle.load(f)
 
 x_input = user_inputs()
 st.write('You selected:')
 st.dataframe(x_input)
 
 def predict(model, transformed):
-    # FIX 4: Removed the "np." typo
-    output = np.rint(model.predict(transformed))
+    # XGBoost trained on y_train - 1, so we add 1 back to get the 1-5 score
+    output = np.rint(model.predict(transformed)) + 1
     return output
 
-# design user interface
 if st.button("Predict"):
-    transformed = transform(x_input)
-    prediction = predict(model, transformed)
-    st.subheader("Prediction based on your inputs:")
-    st.write(f"...\n {prediction}\n")
+    transformed = transform(x_input, count_dict, cols_to_transform)
+    
+    try:
+        # Reindexing ensures the dataframe columns perfectly match what XGBoost expects
+        transformed = transformed.reindex(columns=model.feature_names_in_, fill_value=0)
+        
+        prediction = predict(model, transformed)
+        final_score = int(prediction[0])
+        
+        st.subheader("Prediction based on your inputs:")
+        st.write(f"The predicted Customer Churn Risk Score is: **{final_score}** (on a scale of 1-5)")
+    except Exception as e:
+        st.error(f"Error making prediction: {e}")

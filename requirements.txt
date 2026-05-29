@@ -1,7 +1,5 @@
-boto3
 numpy
 pandas
-st-files-connection
 streamlit
 xgboost
-s3fs
+scikit-learn
