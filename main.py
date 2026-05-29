@@ -26,7 +26,7 @@ def user_inputs():
     membership_category = st.selectbox("Select Membership Category", df["membership_category"].unique())
     feedback = st.selectbox("Select Feedback", df["feedback"].unique())
     complaint_status = st.selectbox("Select Complaint Status", df["complaint_status"].unique())
-    region_category = st.selectbox("Select Region Category", df["region_category "].unique())
+    region_category = st.selectbox("Select Region Category", df["region_category"].unique())
     medium_of_operation = st.selectbox("Select Medium of Operation", df["medium_of_operation"].unique())
     preferred_offer_types = st.selectbox("Preferred Offer Types", df["preferred_offer_types"].unique())
     internet_option = st.selectbox("Select internet_option", df["internet_option"].unique())
